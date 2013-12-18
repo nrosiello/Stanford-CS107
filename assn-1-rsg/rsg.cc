@@ -40,6 +40,67 @@ static void readGrammar(ifstream& infile, map<string, Definition>& grammar)
 }
 
 /**
+ * Determines if a given string is a nonterminal.
+ */
+static bool isNonTerm(string word)
+{
+  return word[0] == '<';
+}
+
+/**
+ * Expands a given non-terminal recursively.
+ */
+static void expandNonTerm(vector<string>& iter, 
+    map<string, Definition> grammar, 
+    string nonTerm)
+{
+  Definition def = grammar[nonTerm];
+  Production randomProd = def.getRandomProduction();
+
+  vector<string>::iterator curr;
+  for (curr = randomProd.begin(); curr < randomProd.end(); curr++) {
+    string word = *curr;
+    if (isNonTerm(word)) {
+      expandNonTerm(iter, grammar, word);
+    } else {
+      iter.push_back(word);
+    }
+  }
+}
+
+/**
+ * Populates a vector of strings with the result of a single iteration
+ * of the random sentence generator for the given grammar file.
+ * The vector is cleared in case it is non-empty.
+ */
+static void populateIter(vector<string>& iter, map<string, Definition>& grammar)
+{
+  iter.clear();
+  expandNonTerm(iter, grammar, "<start>");
+}
+
+/**
+ * Displays the result of an iteration.
+ */
+static void displayIter(vector<string>& iter)
+{
+  int lineLimit = 60;
+  int currLineSize = 0;
+
+  for (int i = 0; i < iter.size(); i++) {
+    if ((currLineSize + iter[i].size()) > lineLimit) {
+      cout << endl;
+      currLineSize = 0;
+    } else {
+      currLineSize += iter[i].size();
+    }
+
+    cout << iter[i] << " ";
+  }
+  cout << endl;
+}
+
+/**
  * Performs the rudimentary error checking needed to confirm that
  * the client provided a grammar file.  It then continues to
  * open the file, read the grammar into a map<string, Definition>,
@@ -74,6 +135,14 @@ int main(int argc, char *argv[])
   readGrammar(grammarFile, grammar);
   cout << "The grammar file called \"" << argv[1] << "\" contains "
        << grammar.size() << " definitions." << endl;
-  
+
+  // generate and display the three grammar iterations
+  vector<string> iter;
+  for (int i = 1; i <= 3; i++) {
+    cout << "Version #" << i << ": -------------------" << endl;
+    populateIter(iter, grammar);
+    displayIter(iter);
+  }
+ 
   return 0;
 }

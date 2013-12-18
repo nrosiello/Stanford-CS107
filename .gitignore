@@ -1,3 +1,4 @@
 *.swp
 *.o
 *.pure*
+Makefile.dependencies
