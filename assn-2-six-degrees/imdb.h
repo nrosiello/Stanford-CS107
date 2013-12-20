@@ -9,6 +9,8 @@ using namespace std;
 class imdb {
   
  public:
+  void extractFilms(const void *elem, vector<film>& films) const;
+  film movieRecToFilm(const void *elem) const;
   
   /**
    * Constructor: imdb

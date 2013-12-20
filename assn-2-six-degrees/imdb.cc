@@ -24,9 +24,85 @@ bool imdb::good() const
 	    (movieInfo.fd == -1) ); 
 }
 
+///------------------------------ 
+struct cmpPair {
+  char *key;
+  const void *recBlob;
+};
+
+static char *getRecord(const void *recBlob, const void *elem)
+{
+  return (char *) (recBlob) + * (int *) elem;
+}
+
+static void *recNameEnd(const void *rec) {
+  char *iter = (char *) rec;
+  
+  while (*iter) 
+    iter++;
+  iter++;
+
+  if ((unsigned long) iter % 2 == 1)
+    iter++;
+  return iter;
+}
+
+film imdb::movieRecToFilm(const void *movieRec) const
+{
+  string title = (char *) movieRec;
+  unsigned char yearDelta = *(unsigned char *) recNameEnd(movieRec);
+  film filmStr = { title, 1900 + yearDelta };
+  return filmStr;
+}
+
+int actorCmpFn(const void *keyPtr, const void *elem)
+{
+  cmpPair keyPair = * (cmpPair *) keyPtr;
+  char *elemName = getRecord(keyPair.recBlob, elem);
+  return strcmp(keyPair.key, elemName);
+}
+
+void imdb::extractFilms(const void *elem, vector<film>& films) const
+{
+  void *actorRec = getRecord(actorFile, elem);
+  short *numCredits = (short *) recNameEnd(actorRec);
+  int *filmElemArray = (int *) (numCredits + 1);
+  // need to move the pointer over two bytes if it is not a multiple of four
+  int additionalPadding = ((char *) filmElemArray - (char *) actorRec) % 4;
+  filmElemArray = (int *) ((char *) filmElemArray + additionalPadding);
+  
+  films.clear();
+  for (int i = 0; i < *numCredits; i++) {
+    void *movieRec = getRecord(movieFile, filmElemArray + i); 
+    films.push_back(movieRecToFilm(movieRec));
+  }
+}
+
 // you should be implementing these two methods right here... 
-bool imdb::getCredits(const string& player, vector<film>& films) const { return false; }
-bool imdb::getCast(const film& movie, vector<string>& players) const { return false; }
+bool imdb::getCredits(const string& player, vector<film>& films) const
+{ 
+  int numActors = * (int *) actorFile;
+  int *base = (int *) actorFile + 1;
+ 
+  // create a pair that needs to be passed into bsearch containing the
+  // actor name and a pointer to the record blob 
+  char key[256];
+  strcpy(key, player.c_str());
+  cmpPair keyPair = { key, actorFile };
+  
+  void *found = bsearch(&keyPair, base, numActors, sizeof(int), actorCmpFn);
+
+  if (found) {
+    extractFilms(found, films);
+    return true;
+  } else { 
+    return false;
+  }
+}
+
+bool imdb::getCast(const film& movie, vector<string>& players) const { 
+ return false;
+}
 
 imdb::~imdb()
 {

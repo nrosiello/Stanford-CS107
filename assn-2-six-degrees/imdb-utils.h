@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <assert.h>
 using namespace std;
 
 /**
@@ -62,11 +63,13 @@ inline const char *determinePathToData(const char *userSelectedPath = NULL)
   if (userSelectedPath != NULL) return userSelectedPath;
   
   const char *ostype = getenv("OSTYPE");
+  if (ostype == NULL)
+    return "data/little-endian";
   if (strcasecmp(ostype, "linux") == 0)
     return "/usr/class/cs107/assignments/assn-2-six-degrees-data/little-endian/";
   if (strcasecmp(ostype, "solaris") == 0)
     return "/usr/class/cs107/assignments/assn-2-six-degrees-data/big-endian/";
-  
+ 
   cerr << "Unsupported OS... bailing" << endl;
   exit(1);
   return NULL;
