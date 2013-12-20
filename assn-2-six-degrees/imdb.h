@@ -10,7 +10,9 @@ class imdb {
   
  public:
   void extractFilms(const void *elem, vector<film>& films) const;
-  film movieRecToFilm(const void *elem) const;
+  void extractCast(const void *elem, vector<string>& players) const;
+  void *searchFile(const void *file, const void *key,
+    int (*cmpFn)(const void *, const void *)) const;
   
   /**
    * Constructor: imdb

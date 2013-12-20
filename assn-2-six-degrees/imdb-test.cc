@@ -202,9 +202,7 @@ int main(int argc, char **argv)
 {
   imdb db(determinePathToData());
   if (!db.good()) { cerr << "Data directory not found!  Aborting..." << endl; return 1; }
-  //queryForActors(db);
-  vector<film> testFilms;
-  db.getCredits("Tom Cruise", testFilms); 
-  cout << "Num films: " << testFilms.size() << endl;
+  queryForActors(db);
+  
   return 0;
 }
