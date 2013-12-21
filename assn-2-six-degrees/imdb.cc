@@ -60,6 +60,20 @@ static void *actorNameEnd(const void *rec) {
   return iter;
 }
 
+/**
+ * Returns a pointer to the one-byte year offset of a movie record if
+ * given a pointer to the beginning of the movie record.
+ */
+static unsigned char *movieYearOffset(const void *rec) {
+  char *iter = (char *) rec;
+
+  while (*iter)
+    iter++;
+  iter++;
+
+  return (unsigned char *) iter;
+}
+
 /*
  * Given a pointer to a movie record, returns a film containing the title
  * and year of the movie.
@@ -67,7 +81,7 @@ static void *actorNameEnd(const void *rec) {
 film movieRecToFilm(const void *movieRec) 
 {
   string title = (char *) movieRec;
-  unsigned char yearDelta = *(unsigned char *) actorNameEnd(movieRec);
+  unsigned char yearDelta = *movieYearOffset(movieRec);
   film filmStr = { title, 1900 + yearDelta };
   return filmStr;
 }

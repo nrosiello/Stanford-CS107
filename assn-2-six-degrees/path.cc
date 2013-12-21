@@ -39,6 +39,24 @@ void path::undoConnection()
 }
 
 /**
+ * Prints the path to the screen.
+ */
+void path::printPathLine(const string& actor1, const string& actor2,
+    const film& movie)
+{
+  cout <<  actor1 << " was in \"" << movie.title << "\" (" << movie.year << ") with " << actor2 << endl;
+}
+
+void path::print()
+{
+  if (links.size() > 0)
+    printPathLine(startPlayer, links[0].player, links[0].movie);
+  
+  for (int i = 1; i < links.size(); i++) 
+    printPathLine(links[i-1].player, links[i].player, links[i].movie);
+}
+
+/**
  * Returns the last player (actor/actress) currently 
  * in the path.
  */

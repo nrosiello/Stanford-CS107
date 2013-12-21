@@ -95,6 +95,13 @@ class path {
   void undoConnection();
   
   /**
+   * Method: print 
+   * -------------
+   *  Prints the path.
+   */
+  void print();
+  
+  /**
    * Method: getLastPlayer
    * ---------------------
    * Returns the address of the last player in the
@@ -115,6 +122,8 @@ class path {
   void reverse();
   
  private:
+  void printPathLine(const string& actor1, const string& actor2,
+      const film& movie);
   // private struct definition... no one else uses it, so I define it internally
   // if you think about it, the existence of this struct is really an implementation detail,
   // so its very definition should be private, right?
