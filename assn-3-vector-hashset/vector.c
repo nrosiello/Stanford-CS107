@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <search.h>
 
 static void VectorGrow(vector *v)
 {
@@ -62,7 +63,10 @@ void VectorDelete(vector *v, int position)
 {}
 
 void VectorSort(vector *v, VectorCompareFunction compare)
-{}
+{
+  assert(compare != NULL);
+  qsort(v->elems, v->logLength, v->elemSize, compare);
+}
 
 void VectorMap(vector *v, VectorMapFunction mapFn, void *auxData)
 {
@@ -71,6 +75,30 @@ void VectorMap(vector *v, VectorMapFunction mapFn, void *auxData)
     mapFn(VectorNth(v, i), auxData);
 }
 
+// Given a pointer to an element in the array, returns the integer index of 
+// the element.
+static int VectorIndex(const vector *v, const void *elemAddr)
+{
+  int offset = (char *) elemAddr - (char *) v->elems;
+  return offset / v->elemSize;
+}
+
 static const int kNotFound = -1;
 int VectorSearch(const vector *v, const void *key, VectorCompareFunction searchFn, int startIndex, bool isSorted)
-{ return -1; } 
+{ 
+  assert(key != NULL);
+  assert(searchFn != NULL);
+  assert(startIndex >= 0);
+  assert(startIndex < v->logLength);
+
+  void *found;
+  void *base = VectorNth(v, startIndex);
+  size_t numElems = v->logLength - startIndex;
+  if (isSorted) {
+    found = bsearch(key, base, numElems, v->elemSize, searchFn);
+  } else {
+    found = lfind(key, base, &numElems, v->elemSize, searchFn);
+  }
+
+  return found ? VectorIndex(v, found) : kNotFound;
+}
