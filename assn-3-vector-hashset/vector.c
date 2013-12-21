@@ -34,20 +34,50 @@ void VectorDispose(vector *v)
 {}
 
 int VectorLength(const vector *v)
-{ return 0; }
+{ 
+  return v->logLength;
+}
+
+// the raw Nth function does not do any error checking.  it is meant for internal
+// use by the vector implementation
+static void *VectorRawNth(const vector *v, int position)
+{
+  return (char *) v->elems + (position * v->elemSize); 
+}
 
 void *VectorNth(const vector *v, int position)
 {
   assert(position >= 0);
   assert(position < v->logLength);
-  return (char *) v->elems + (position * v->elemSize); 
+  return VectorRawNth(v, position);
 }
 
 void VectorReplace(vector *v, const void *elemAddr, int position)
 {}
 
+static void VectorElemShift(vector *v, int position, int delta)
+{
+  void *src = VectorRawNth(v, position);
+  void *dest = VectorRawNth(v, position + delta);
+  size_t len = (char *) VectorRawNth(v, v->logLength) - (char *) src;
+  memmove(dest, src, len);
+}
+
 void VectorInsert(vector *v, const void *elemAddr, int position)
-{}
+{
+  assert(position >= 0);
+  assert(position <= v->logLength);
+
+  if (v->allocLength == v->logLength)
+    VectorGrow(v);
+  
+  // shift the elements over as necessary
+  VectorElemShift(v, position, 1);
+
+  // insert the new element into its slot
+  memcpy(VectorRawNth(v, position), elemAddr, v->elemSize);
+  v->logLength++;
+}
 
 void VectorAppend(vector *v, const void *elemAddr)
 {
@@ -60,7 +90,16 @@ void VectorAppend(vector *v, const void *elemAddr)
 }
 
 void VectorDelete(vector *v, int position)
-{}
+{
+  assert(position >= 0);
+  assert(position < v->logLength);
+
+  if (v->freeFn != NULL)
+    v->freeFn(VectorNth(v, position));
+  
+  VectorElemShift(v, position+1, -1);
+  v->logLength--;
+}
 
 void VectorSort(vector *v, VectorCompareFunction compare)
 {

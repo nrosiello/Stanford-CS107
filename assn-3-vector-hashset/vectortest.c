@@ -137,7 +137,7 @@ static void TestInsertDelete(vector *alphabet)
   for (i = 3; i < VectorLength(alphabet); i += 4) // Insert dash every 4th char 
     VectorInsert(alphabet, &ch, i);
   fprintf(stdout, "\nAfter insert dashes: ");
-  VectorMap(alphabet, PrintChar, stdout);
+  VectorMap(alphabet, PrintChar, stdout); 
   
   for (i = 3; i < VectorLength(alphabet); i += 3) // Delete every 4th char 
     VectorDelete(alphabet, i);
@@ -197,8 +197,8 @@ static void SimpleTest()
   TestSortSearch(&alphabet);
   TestAt(&alphabet);
   TestInsertDelete(&alphabet);
-  TestReplace(&alphabet);
-  VectorDispose(&alphabet);
+  //TestReplace(&alphabet);
+  //VectorDispose(&alphabet);
 }
 
 /** 
@@ -404,8 +404,8 @@ static void MemoryTest()
 int main(int ignored, char **alsoIgnored) 
 {
   SimpleTest();
-  ChallengingTest();
-  MemoryTest();
+  //ChallengingTest();
+  //MemoryTest();
   return 0;
 }
 
