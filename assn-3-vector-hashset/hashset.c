@@ -40,13 +40,25 @@ void HashSetNew(hashset *h, int elemSize, int numBuckets,
 }
 
 void HashSetDispose(hashset *h)
-{}
+{
+  if (h->freefn != NULL) {
+    for (int i = 0; i < h->numBuckets; i++)
+      VectorDispose(h->buckets + i);
+  }
+  free(h->buckets);
+}
 
 int HashSetCount(const hashset *h)
-{ return 0; }
+{
+  int count = 0;
+  for (int i = 0; i < h->numBuckets; i++)
+    count += VectorLength(h->buckets + i);
+  return count;
+}
 
 void HashSetMap(hashset *h, HashSetMapFunction mapfn, void *auxData)
 {
+  assert(mapfn != NULL);
   for (int i = 0; i < h->numBuckets; i++) 
     VectorMap(h->buckets + i, mapfn, auxData);
 }
