@@ -143,10 +143,10 @@ int VectorSearch(const vector *v, const void *key, VectorCompareFunction searchF
   assert(key != NULL);
   assert(searchFn != NULL);
   assert(startIndex >= 0);
-  assert(startIndex < v->logLength);
+  assert(startIndex <= v->logLength);
 
   void *found;
-  void *base = VectorNth(v, startIndex);
+  void *base = VectorRawNth(v, startIndex);
   size_t numElems = v->logLength - startIndex;
   if (isSorted) {
     found = bsearch(key, base, numElems, v->elemSize, searchFn);
