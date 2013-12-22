@@ -71,12 +71,13 @@ void HashSetEnter(hashset *h, const void *elemAddr)
   } else {
     vector *v = HashSetElemVector(h, elemAddr);
     VectorAppend(v, elemAddr);
+    VectorSort(v, h->comparefn);
   }
 }
 
 void *HashSetLookup(const hashset *h, const void *elemAddr)
 { 
   vector *v = HashSetElemVector(h, elemAddr);
-  int pos = VectorSearch(v, elemAddr, h->comparefn, 0, false);
+  int pos = VectorSearch(v, elemAddr, h->comparefn, 0, true);
   return pos == -1 ? NULL : VectorNth(v, pos);
 }
