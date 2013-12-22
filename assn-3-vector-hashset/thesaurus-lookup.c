@@ -226,7 +226,7 @@ int main(int argc, const char *argv[])
   hashset thesaurus;
   HashSetNew(&thesaurus, sizeof(thesaurusEntry), kApproximateWordCount, StringHash, StringCompare, ThesEntryFree);
   const char *thesaurusFileName = (argc == 1) ? 
-    "/usr/class/cs107/assignments/assn-3-vector-hashset-data/thesaurus.txt" : argv[1];
+    "data/thesaurus.txt" : argv[1];
   ReadThesaurus(&thesaurus, thesaurusFileName);
   QueryThesaurus(&thesaurus);
   HashSetDispose(&thesaurus);
