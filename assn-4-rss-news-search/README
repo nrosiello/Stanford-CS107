@@ -18,7 +18,7 @@ keyed on C strings).
  * hashing "Peter Pawlowski" and "PETER PAWLOWSKI" to the same code.  
  */  
 
-static const signed long kHashMultiplier = -1664117991L;
+static const signed long kHashMultiplkier = -1664117991L;
 static int StringHash(const char *s, int numBuckets)  
 {            
   int i;
