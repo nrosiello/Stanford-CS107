@@ -1,2 +1,1 @@
-Seattle Times (Top Stories): http://seattletimes.nwsource.com/rss/home.xml
-Seattle Times (Top Stories): http://seattletimes.nwsource.com/rss/home.xml
+Seattle Times (Nation/World): http://seattletimes.nwsource.com/rss/nationworld.xml

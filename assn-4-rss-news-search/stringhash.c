@@ -17,3 +17,18 @@ int StringHash(const char *s, int numBuckets)
   return hashcode % numBuckets;
 }
 
+int wordHashFn(const void *elemAddr, int numBuckets)
+{
+  char *word = * (char **) elemAddr;
+  return StringHash(word, numBuckets);
+}
+
+int wordCmpFn(const void *elem1, const void *elem2)
+{
+  return strcasecmp(*(const char **) elem1, *(const char **) elem2);
+}
+
+void wordFreeFn(void *elem)
+{
+  free(* (void **) elem);
+}
