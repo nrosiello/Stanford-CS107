@@ -21,7 +21,7 @@ PFLAGS= -linker=/usr/pubsw/bin/ld -best-effort
 
 EFENCELIBS= -L/usr/class/cs107/lib -lefence  -pthread
 
-SRCS = rss-news-search.c
+SRCS = rss-news-search.c stringhash.c
 OBJS = $(SRCS:.c=.o)
 TARGET = rss-news-search
 TARGET-PURE = rss-news-search.purify

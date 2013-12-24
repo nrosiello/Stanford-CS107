@@ -11,6 +11,7 @@
 #include "html-utils.h"
 #include "hashset.h"
 #include "vector.h"
+#include "stringhash.h"
 
 static bool isStopWord(const char *word, const hashset *stopWords); 
 static void PopulateStopWords(hashset *stopWords, const char *kStopWordsFile);
@@ -60,21 +61,6 @@ int main(int argc, char **argv)
   BuildIndices((argc == 1) ? kDefaultFeedsFile : argv[1], &stopWords);
   QueryIndices(&stopWords);
   return 0;
-}
-
-/**
- * Functions used to manage the stop words hashset.
- */
-static const signed long kHashMultiplier = -1664117991L;
-static int StringHash(const char *s, int numBuckets)  
-{            
-  int i;
-  unsigned long hashcode = 0;
-       
-  for (i = 0; i < strlen(s); i++)  
-    hashcode = hashcode * kHashMultiplier + tolower(s[i]);  
-          
-  return hashcode % numBuckets;
 }
 
 int wordHashFn(const void *elemAddr, int numBuckets)
