@@ -12,15 +12,20 @@
 #include "hashset.h"
 #include "vector.h"
 #include "stringhash.h"
+#include "wordcountindex.h"
+#include "article.h"
 
 static bool isStopWord(const char *word, const hashset *stopWords); 
 static void PopulateStopWords(hashset *stopWords, const char *kStopWordsFile);
 static void Welcome(const char *welcomeTextFileName);
-static void BuildIndices(const char *feedsFileName, const hashset *stopWords);
-static void ProcessFeed(const char *remoteDocumentName, const hashset *stopWords);
-static void PullAllNewsItems(urlconnection *urlconn, const hashset *stopWords);
+static void BuildIndices(const char *feedsFileName, const hashset *stopWords,
+    hashset *prevSeenArticles);
+static void ProcessFeed(const char *remoteDocumentName, const hashset *stopWords,
+    hashset *prevSeenArticles);
+static void PullAllNewsItems(urlconnection *urlconn, const hashset *stopWords, hashset *prevSeenArticles);
 static bool GetNextItemTag(streamtokenizer *st);
-static void ProcessSingleNewsItem(streamtokenizer *st, const hashset *stopWords);
+static void ProcessSingleNewsItem(streamtokenizer *st, const hashset *stopWords,
+    hashset *prevSeenArticles);
 static void ExtractElement(streamtokenizer *st, const char *htmlTag, char dataBuffer[], int bufferLength);
 static void ParseArticle(const char *articleTitle, const char *articleDescription, 
     const char *articleURL, const hashset *stopWords);
@@ -53,13 +58,24 @@ static const char *const kStopWordsFile = "data/stop-words.txt";
 static const char *const kNewLineDelimiters = "\r\n";
 int main(int argc, char **argv)
 {
-  // Create a hashset of stop words
+  // initialize the necessary hashsets
   hashset stopWords;
   PopulateStopWords(&stopWords, kStopWordsFile);
+  hashset wordCounts;
+  InitializeWordCounts(&wordCounts);
+  hashset prevSeenArticles;
+  InitializePrevSeenArticles(&prevSeenArticles);
 
+  // build the word counts index and query the user
   Welcome(kWelcomeTextFile);
-  BuildIndices((argc == 1) ? kDefaultFeedsFile : argv[1], &stopWords);
+  BuildIndices((argc == 1) ? kDefaultFeedsFile : argv[1], &stopWords, &prevSeenArticles);
   QueryIndices(&stopWords);
+  
+  // clean-up 
+  HashSetDispose(&stopWords);
+// HashSetDispose(&wordCounts);
+  HashSetDispose(&prevSeenArticles);
+
   return 0;
 }
 
@@ -153,7 +169,8 @@ static void Welcome(const char *welcomeTextFileName)
  * document and index its content.
  */
 
-static void BuildIndices(const char *feedsFileName, const hashset *stopWords)
+static void BuildIndices(const char *feedsFileName, const hashset *stopWords, 
+    hashset *prevSeenArticles)
 {
   FILE *infile;
   streamtokenizer st;
@@ -165,7 +182,7 @@ static void BuildIndices(const char *feedsFileName, const hashset *stopWords)
   while (STSkipUntil(&st, ":") != EOF) { // ignore everything up to the first selicolon of the line
     STSkipOver(&st, ": ");		 // now ignore the semicolon and any whitespace directly after it
     STNextToken(&st, remoteFileName, sizeof(remoteFileName));   
-    ProcessFeed(remoteFileName, stopWords);
+    ProcessFeed(remoteFileName, stopWords, prevSeenArticles);
   }
   
   STDispose(&st);
@@ -183,7 +200,8 @@ static void BuildIndices(const char *feedsFileName, const hashset *stopWords)
  * for ParseArticle for information about what the different response codes mean.
  */
 
-static void ProcessFeed(const char *remoteDocumentName, const hashset *stopWords)
+static void ProcessFeed(const char *remoteDocumentName, const hashset *stopWords,
+    hashset *prevSeenArticles)
 {
   url u;
   urlconnection urlconn;
@@ -194,10 +212,10 @@ static void ProcessFeed(const char *remoteDocumentName, const hashset *stopWords
   switch (urlconn.responseCode) {
       case 0: printf("Unable to connect to \"%s\".  Ignoring...", u.serverName);
               break;
-      case 200: PullAllNewsItems(&urlconn, stopWords);
+      case 200: PullAllNewsItems(&urlconn, stopWords, prevSeenArticles);
                 break;
       case 301: 
-      case 302: ProcessFeed(urlconn.newUrl, stopWords);
+      case 302: ProcessFeed(urlconn.newUrl, stopWords, prevSeenArticles);
                 break;
       default: printf("Connection to \"%s\" was established, but unable to retrieve \"%s\". [response code: %d, response message:\"%s\"]\n",
 		      u.serverName, u.fileName, urlconn.responseCode, urlconn.responseMessage);
@@ -236,12 +254,13 @@ static void ProcessFeed(const char *remoteDocumentName, const hashset *stopWords
  */
 
 static const char *const kTextDelimiters = " \t\n\r\b!@$%^*()_+={[}]|\\'\":;/?.>,<~`";
-static void PullAllNewsItems(urlconnection *urlconn, const hashset *stopWords)
+static void PullAllNewsItems(urlconnection *urlconn, const hashset *stopWords,
+    hashset *prevSeenArticles)
 {
   streamtokenizer st;
   STNew(&st, urlconn->dataStream, kTextDelimiters, false);
   while (GetNextItemTag(&st)) { // if true is returned, then assume that <item ...> has just been read and pulled from the data stream
-    ProcessSingleNewsItem(&st, stopWords);
+    ProcessSingleNewsItem(&st, stopWords, prevSeenArticles);
   }
   
   STDispose(&st);
@@ -303,7 +322,7 @@ static const char *const kItemEndTag = "</item>";
 static const char *const kTitleTagPrefix = "<title";
 static const char *const kDescriptionTagPrefix = "<description";
 static const char *const kLinkTagPrefix = "<link";
-static void ProcessSingleNewsItem(streamtokenizer *st, const hashset *stopWords)
+static void ProcessSingleNewsItem(streamtokenizer *st, const hashset *stopWords, hashset *prevSeenArticles)
 {
   char htmlTag[1024];
   char articleTitle[1024];
@@ -318,7 +337,12 @@ static void ProcessSingleNewsItem(streamtokenizer *st, const hashset *stopWords)
   }
   
   if (strncmp(articleURL, "", sizeof(articleURL)) == 0) return;     // punt, since it's not going to take us anywhere
-  ParseArticle(articleTitle, articleDescription, articleURL, stopWords);
+
+  bool newArticle = IsNewArticle(prevSeenArticles, articleURL, articleTitle);
+  if (newArticle)
+    ParseArticle(articleTitle, articleDescription, articleURL, stopWords);
+  else
+    printf("Skipping previously seen article: \"%s\"\n\tfrom \"%s\"\n", articleTitle, articleURL);
 }
 
 /**
