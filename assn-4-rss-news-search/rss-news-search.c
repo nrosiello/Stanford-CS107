@@ -40,8 +40,8 @@ static bool WordIsWellFormed(const char *word);
  * word appears.
  */
 
-static const char *const kWelcomeTextFile = "/usr/class/cs107/assignments/assn-4-rss-news-search-data/welcome.txt";
-static const char *const kDefaultFeedsFile = "/usr/class/cs107/assignments/assn-4-rss-news-search-data/rss-feeds.txt";
+static const char *const kWelcomeTextFile = "data/welcome.txt";
+static const char *const kDefaultFeedsFile = "data/rss-feeds-tiny.txt";
 int main(int argc, char **argv)
 {
   Welcome(kWelcomeTextFile);
