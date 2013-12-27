@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <math.h>
 #include <string.h>
+#include <stdbool.h>
 
 int main(int argc, char **argv)
 {
@@ -106,4 +107,17 @@ int main(int argc, char **argv)
 
   short s = 1;
   printf("\tIf big endian, this should be 0: %d\n", *  (unsigned char *) &s);
-} 
+
+  /**
+   * Problem 4: Identical Outputs
+   */
+
+  // part a:
+  // int *a;
+  // int *b;
+  // *a = b + 1;
+
+  // part b:
+  // int x[2];
+  // * ((int *) x[1]) = x[0] + 4;
+}
