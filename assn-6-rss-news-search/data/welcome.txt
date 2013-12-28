@@ -1,0 +1,7 @@
+Welcome to the Multithreaded CS107 RSS Search Engine!
+
+
+This handy tool pulls and processes a huge number of RSS (Rich Site Summary) pages, 
+and then allows for a simple search of those documents.  Each document is downloaded
+in its own thread to vastly decrease the time to create the article database compared
+to sequential processing in one thread.

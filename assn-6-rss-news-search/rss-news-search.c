@@ -97,7 +97,7 @@ static int ArticleFrequencyCompare(const void *elem1, const void *elem2);
  *         within the code base that end the program abnormally)
  */
 
-static const char *const kWelcomeTextFile = "http://cs107.stanford.edu/rss-news/welcome.txt";
+static const char *const kWelcomeTextFile = "data/welcome.txt";
 static const char *const kDefaultStopWordsFile = "http://cs107.stanford.edu/rss-news/stop-words.txt";
 static const char *const kDefaultFeedsFile = "http://cs107.stanford.edu/rss-news/rss-feeds.txt";
 int main(int argc, char **argv)
@@ -107,9 +107,9 @@ int main(int argc, char **argv)
   
   //InitThreadPackage(false);
   Welcome(kWelcomeTextFile);
-  LoadStopWords(&db.stopWords, kDefaultStopWordsFile);
-  BuildIndices(&db, feedsFileName);
-  QueryIndices(&db);
+  //LoadStopWords(&db.stopWords, kDefaultStopWordsFile);
+  //BuildIndices(&db, feedsFileName);
+  //QueryIndices(&db);
   return 0;
 }
 
@@ -123,37 +123,26 @@ int main(int argc, char **argv)
  * we can change the welcome text without forcing a recompilation and
  * build of the application.  It's as if welcomeTextFileName
  * is a configuration file that travels with the application.
- *
- * @param welcomeTextURL the URL of the document that should be pulled
- *                       and printed verbatim.
- *
- * No return value.
  */
  
 static const char *const kNewLineDelimiters = "\r\n";
-static void Welcome(const char *welcomeTextURL)
+static void Welcome(const char *welcomeTextFileName)
 {
-  url u;
-  urlconnection urlconn;
+  FILE *infile;
+  streamtokenizer st;
+  char buffer[1024];
   
-  URLNewAbsolute(&u, welcomeTextURL);
-  URLConnectionNew(&urlconn, &u);
+  infile = fopen(welcomeTextFileName, "r");
+  assert(infile != NULL);    
   
-  if (urlconn.responseCode / 100 == 3) {
-    Welcome(urlconn.newUrl);
-  } else {
-    streamtokenizer st;
-    char buffer[4096];
-    STNew(&st, urlconn.dataStream, kNewLineDelimiters, true);
-    while (STNextToken(&st, buffer, sizeof(buffer))) {
-      printf("%s\n", buffer);
-    }  
-    printf("\n");
-    STDispose(&st); // remember that STDispose doesn't close the file, since STNew doesn't open one.. 
+  STNew(&st, infile, kNewLineDelimiters, true);
+  while (STNextToken(&st, buffer, sizeof(buffer))) {
+    printf("%s\n", buffer);
   }
-
-  URLConnectionDispose(&urlconn);
-  URLDispose(&u);
+  
+  printf("\n");
+  STDispose(&st); // remember that STDispose doesn't close the file, since STNew doesn't open one.. 
+  fclose(infile);
 }
 
 /**
