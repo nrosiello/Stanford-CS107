@@ -47,7 +47,7 @@ typedef struct {
 } rssRelevantArticleEntry;
 
 static void Welcome(const char *welcomeTextURL);
-static void LoadStopWords(hashset *stopWords, const char *stopWordsURL);
+static void LoadStopWords(hashset *stopWords, const char *kStopWordsFile);
 static void BuildIndices(rssDatabase *db, const char *feedsFileName);
 static void ProcessFeed(rssDatabase *db, const char *remoteDocumentName);
 static void PullAllNewsItems(rssDatabase *db, urlconnection *urlconn);
@@ -98,16 +98,15 @@ static int ArticleFrequencyCompare(const void *elem1, const void *elem2);
  */
 
 static const char *const kWelcomeTextFile = "data/welcome.txt";
-static const char *const kDefaultStopWordsFile = "http://cs107.stanford.edu/rss-news/stop-words.txt";
+static const char *const kDefaultStopWordsFile = "data/stop-words.txt";
 static const char *const kDefaultFeedsFile = "http://cs107.stanford.edu/rss-news/rss-feeds.txt";
 int main(int argc, char **argv)
 {
   const char *feedsFileName = (argc == 1) ? kDefaultFeedsFile : argv[1];
   rssDatabase db;
   
-  //InitThreadPackage(false);
   Welcome(kWelcomeTextFile);
-  //LoadStopWords(&db.stopWords, kDefaultStopWordsFile);
+  LoadStopWords(&db.stopWords, kDefaultStopWordsFile);
   //BuildIndices(&db, feedsFileName);
   //QueryIndices(&db);
   return 0;
@@ -159,7 +158,7 @@ static void Welcome(const char *welcomeTextFileName)
  *
  * @param stopWords the (raw and uninitialized) hashset to be initialized
  *                  and populated with a list of stop words.
- * @param stopWordsURL the path to the flat text file, where stop words
+ * @param kStopWordsFile the path to the flat text file, where stop words
  *                     are listed one per line without any additional
  *                     white space.
  *
@@ -167,30 +166,25 @@ static void Welcome(const char *welcomeTextFileName)
  */
 
 static const int kNumStopWordsBuckets = 1009;
-static void LoadStopWords(hashset *stopWords, const char *stopWordsURL)
+static void LoadStopWords(hashset *stopWords, const char *kStopWordsFile)
 {
-  url u;
-  urlconnection urlconn;
+  HashSetNew(stopWords, sizeof(char *), kNumStopWordsBuckets, StringHash, StringCompare, StringFree);
   
-  URLNewAbsolute(&u, stopWordsURL);
-  URLConnectionNew(&urlconn, &u);
+  FILE *infile;
+  streamtokenizer st;
+  char buffer[1024];
   
-  if (urlconn.responseCode / 100 == 3) {
-    LoadStopWords(stopWords, urlconn.newUrl);
-  } else {
-    streamtokenizer st;
-    char buffer[4096];
-    HashSetNew(stopWords, sizeof(char *), kNumStopWordsBuckets, StringHash, StringCompare, StringFree);
-    STNew(&st, urlconn.dataStream, kNewLineDelimiters, true);
-    while (STNextToken(&st, buffer, sizeof(buffer))) {
-      char *stopWord = strdup(buffer);
-      HashSetEnter(stopWords, &stopWord);
-    }
-    STDispose(&st);
+  infile = fopen(kStopWordsFile, "r");
+  assert(infile != NULL);    
+  
+  STNew(&st, infile, kNewLineDelimiters, true);
+  while (STNextToken(&st, buffer, sizeof(buffer))) {
+    char *newWord = strdup(buffer);
+    HashSetEnter(stopWords, &newWord);
   }
 
-  URLConnectionDispose(&urlconn);
-  URLDispose(&u);
+  STDispose(&st); // remember that STDispose doesn't close the file, since STNew doesn't open one.. 
+  fclose(infile);
 }
 
 /**
