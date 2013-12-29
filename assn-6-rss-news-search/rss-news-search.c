@@ -4,6 +4,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <expat.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 #include "url.h"
 #include "bool.h"
@@ -15,8 +17,11 @@
 
 typedef struct {
   hashset stopWords;
+  sem_t stopWordsLock;
   hashset indices;
+  sem_t indicesLock;
   vector previouslySeenArticles;
+  sem_t previouslySeenArticlesLock;
 } rssDatabase;
 
 typedef struct {
@@ -57,9 +62,10 @@ static void ProcessEndTag(void *userData, const char *name);
 static void ProcessTextData(void *userData, const char *text, int len);
 
 static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *articleURL);
-static void ScanArticle(streamtokenizer *st, int articleID, hashset *indices, hashset *stopWords);
-static bool WordIsWorthIndexing(const char *word, hashset *stopWords);
-static void AddWordToIndices(hashset *indices, const char *word, int articleIndex);
+static void ScanArticle(streamtokenizer *st, int articleID, hashset *indices, hashset *stopWords, sem_t *indicesLock, sem_t *stopWordsLock);
+static bool WordIsWorthIndexing(const char *word, hashset *stopWords, sem_t *stopWordsLock);
+static void AddWordToIndices(hashset *indices, const char *word, int articleIndex,
+    sem_t *indicesLock);
 static void QueryIndices(rssDatabase *db);
 static void ProcessResponse(rssDatabase *db, const char *word);
 static void ListTopArticles(rssIndexEntry *index, vector *previouslySeenArticles);
@@ -80,6 +86,8 @@ static void IndexEntryFree(void *elem);
 
 static int ArticleIndexCompare(const void *elem1, const void *elem2);
 static int ArticleFrequencyCompare(const void *elem1, const void *elem2);
+bool IsPreviouslySeenArticle(vector *previouslySeenArticles, rssNewsArticle *newsArticle,
+    sem_t *previouslySeenArticlesLock);
 
 /**
  * Function: main
@@ -108,7 +116,7 @@ int main(int argc, char **argv)
   Welcome(kWelcomeTextFile);
   LoadStopWords(&db.stopWords, kDefaultStopWordsFile);
   BuildIndices(&db, feedsFileName);
-  QueryIndices(&db);
+  //QueryIndices(&db);
   return 0;
 }
 
@@ -218,7 +226,10 @@ static void BuildIndices(rssDatabase *db, const char *feedsFileName)
   
   HashSetNew(&db->indices, sizeof(rssIndexEntry), kNumIndexEntryBuckets, IndexEntryHash, IndexEntryCompare, IndexEntryFree);
   VectorNew(&db->previouslySeenArticles, sizeof(rssNewsArticle), NewsArticleFree, 0);
- 
+  sem_init(&db->indicesLock, 0, 1);
+  sem_init(&db->stopWordsLock, 0, 1);
+  sem_init(&db->previouslySeenArticlesLock, 0, 1);
+
   infile = fopen(feedsFileName, "r");
   assert(infile != NULL);
   STNew(&st, infile, kNewLineDelimiters, true);
@@ -460,7 +471,7 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
   
   URLNewAbsolute(&u, articleURL);
   rssNewsArticle newsArticle = { articleTitle, u.serverName, u.fullName };
-  if (VectorSearch(&db->previouslySeenArticles, &newsArticle, NewsArticleCompare, 0, false) >= 0) {
+  if (IsPreviouslySeenArticle(&db->previouslySeenArticles, &newsArticle, &db->previouslySeenArticlesLock)) {
     printf("[Ignoring \"%s\": we've seen it before.]\n", articleTitle);
     URLDispose(&u); 
     return; 
@@ -472,10 +483,12 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
               break;
       case 200: printf("[%s] Indexing \"%s\"\n", u.serverName, articleTitle);
 		NewsArticleClone(&newsArticle, articleTitle, u.serverName, u.fullName);
+    sem_wait(&db->previouslySeenArticlesLock);
 		VectorAppend(&db->previouslySeenArticles, &newsArticle);
 		articleID = VectorLength(&db->previouslySeenArticles) - 1;
+    sem_post(&db->previouslySeenArticlesLock);
 	        STNew(&st, urlconn.dataStream, kTextDelimiters, false);
-		ScanArticle(&st, articleID, &db->indices, &db->stopWords);
+		ScanArticle(&st, articleID, &db->indices, &db->stopWords, &db->indicesLock, &db->stopWordsLock);
 		STDispose(&st);
 		break;
       case 301: 
@@ -490,6 +503,15 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
   URLDispose(&u);
 }
 
+bool IsPreviouslySeenArticle(vector *previouslySeenArticles, rssNewsArticle *newsArticle,
+    sem_t *previouslySeenArticlesLock)
+{
+  sem_wait(previouslySeenArticlesLock);
+  int pos = VectorSearch(previouslySeenArticles, newsArticle, NewsArticleCompare, 0, false);
+  sem_post(previouslySeenArticlesLock);
+ return pos >= 0; 
+}
+
 /**
  * Function: ScanArticle
  * ---------------------
@@ -501,11 +523,13 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
  * @param articleID the index of the relevant article within the vector of previously parsed articles.
  * @param indices the set of indices to which all content in the article being parsed should be added.
  * @param stopWords the set of stop words.
+ * @param indicesLock binary semaphore lock for the shared indices hashset 
+ * @param stopWordsLock binary semaphore lock for the shared stopWords hashset
  *
  * No return value.
  */
 
-static void ScanArticle(streamtokenizer *st, int articleID, hashset *indices, hashset *stopWords)
+static void ScanArticle(streamtokenizer *st, int articleID, hashset *indices, hashset *stopWords, sem_t *indicesLock, sem_t *stopWordsLock)
 {
   char word[1024];
 
@@ -514,8 +538,8 @@ static void ScanArticle(streamtokenizer *st, int articleID, hashset *indices, ha
       SkipIrrelevantContent(st);
     } else {
       RemoveEscapeCharacters(word);
-      if (WordIsWorthIndexing(word, stopWords))
-	AddWordToIndices(indices, word, articleID);
+      if (WordIsWorthIndexing(word, stopWords, stopWordsLock)) 
+	      AddWordToIndices(indices, word, articleID, indicesLock);
     }
   }
 }
@@ -535,13 +559,17 @@ static void ScanArticle(streamtokenizer *st, int articleID, hashset *indices, ha
  *
  * @param the word of interest
  * @param stopWords the set of stop words
+ * @param stopWordsLock binary semaphore lock for the shared stopWords hashset
  * @return true if and only if the word is well formed and not part of the stop
  *         word set.
  */
 
-static bool WordIsWorthIndexing(const char *word, hashset *stopWords)
+static bool WordIsWorthIndexing(const char *word, hashset *stopWords, sem_t *stopWordsLock)
 {
-  return WordIsWellFormed(word) && HashSetLookup(stopWords, &word) == NULL;
+  sem_wait(stopWordsLock);
+  void *stopWordsAddr = HashSetLookup(stopWords, &word);
+  sem_post(stopWordsLock);
+  return WordIsWellFormed(word) && stopWordsAddr == NULL;
 }
 
 /**
@@ -552,13 +580,17 @@ static bool WordIsWorthIndexing(const char *word, hashset *stopWords)
  * @param indices the set of indices being built.
  * @param word the word being added to the set of indices.
  * @param articleIndex the index of the relevant article where the word was found.
+ * @param indicesLock binary semaphore lock for the shared indices hashset
  *
  * No return value.
  */
 
-static void AddWordToIndices(hashset *indices, const char *word, int articleIndex)
+static void AddWordToIndices(hashset *indices, const char *word, int articleIndex,
+    sem_t *indicesLock)
 {
   rssIndexEntry indexEntry = { word }; // partial intialization
+
+  sem_wait(indicesLock);
   rssIndexEntry *existingIndexEntry = HashSetLookup(indices, &indexEntry);
   if (existingIndexEntry == NULL) {
     indexEntry.meaningfulWord = strdup(word);
@@ -579,6 +611,7 @@ static void AddWordToIndices(hashset *indices, const char *word, int articleInde
   rssRelevantArticleEntry *existingArticleEntry = 
     VectorNth(&existingIndexEntry->relevantArticles, existingArticleIndex);
   existingArticleEntry->freq++;
+  sem_post(indicesLock);
 }
 
 /** 
