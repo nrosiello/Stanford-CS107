@@ -6,6 +6,7 @@
 #include <expat.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <unistd.h>
 
 #include "url.h"
 #include "bool.h"
@@ -15,6 +16,9 @@
 #include "vector.h"
 #include "hashset.h"
 
+#define MAX_URL_LENGTH 2048
+#define MAX_TITLE_LENGTH 2048
+
 typedef struct {
   hashset stopWords;
   sem_t stopWordsLock;
@@ -22,11 +26,14 @@ typedef struct {
   sem_t indicesLock;
   vector previouslySeenArticles;
   sem_t previouslySeenArticlesLock;
+  sem_t numURLConnections;
+  vector threads;
+  sem_t threadsLock;
 } rssDatabase;
 
 typedef struct {
-  char title[2048];
-  char url[2048];
+  char title[MAX_TITLE_LENGTH];
+  char url[MAX_URL_LENGTH];
   char *activeField; // field that should be populated... 
 } rssFeedEntry;
 
@@ -50,6 +57,12 @@ typedef struct {
   int articleIndex;
   int freq;
 } rssRelevantArticleEntry;
+
+typedef struct {
+  rssDatabase *db;
+  char *title;
+  char *url;
+} articleThreadEntry;
 
 static void Welcome(const char *welcomeTextURL);
 static void LoadStopWords(hashset *stopWords, const char *kStopWordsFile);
@@ -88,6 +101,9 @@ static int ArticleIndexCompare(const void *elem1, const void *elem2);
 static int ArticleFrequencyCompare(const void *elem1, const void *elem2);
 bool IsPreviouslySeenArticle(vector *previouslySeenArticles, rssNewsArticle *newsArticle,
     sem_t *previouslySeenArticlesLock);
+articleThreadEntry *InitializeArticleThreadEntry(rssFeedState *state, 
+    rssFeedEntry *entry);
+void DisposeArticleThreadEntry(articleThreadEntry *articleData);
 
 /**
  * Function: main
@@ -116,7 +132,7 @@ int main(int argc, char **argv)
   Welcome(kWelcomeTextFile);
   LoadStopWords(&db.stopWords, kDefaultStopWordsFile);
   BuildIndices(&db, feedsFileName);
-  //QueryIndices(&db);
+  QueryIndices(&db);
   return 0;
 }
 
@@ -229,6 +245,9 @@ static void BuildIndices(rssDatabase *db, const char *feedsFileName)
   sem_init(&db->indicesLock, 0, 1);
   sem_init(&db->stopWordsLock, 0, 1);
   sem_init(&db->previouslySeenArticlesLock, 0, 1);
+  sem_init(&db->numURLConnections, 0, 24);
+  VectorNew(&db->threads, sizeof(pthread_t), NULL, 0);
+  sem_init(&db->threadsLock, 0, 1);
 
   infile = fopen(feedsFileName, "r");
   assert(infile != NULL);
@@ -241,6 +260,12 @@ static void BuildIndices(rssDatabase *db, const char *feedsFileName)
   
   STDispose(&st);
   fclose(infile);
+
+  // wait for all the article parsing threads to finish
+  sem_wait(&db->threadsLock);
+  for (int i = 0; i < VectorLength(&db->threads); i++)
+    pthread_join(* (pthread_t *) VectorNth(&db->threads, i), NULL);
+  sem_post(&db->threadsLock);
   printf("\n");
 }
 
@@ -264,8 +289,9 @@ static void ProcessFeed(rssDatabase *db, const char *remoteDocumentName)
 {
   url u;
   urlconnection urlconn;
-  
+ 
   URLNewAbsolute(&u, remoteDocumentName);
+  sem_wait(&db->numURLConnections); 
   URLConnectionNew(&urlconn, &u);
   
   switch (urlconn.responseCode) {
@@ -283,6 +309,7 @@ static void ProcessFeed(rssDatabase *db, const char *remoteDocumentName)
   
   URLConnectionDispose(&urlconn);
   URLDispose(&u);
+  sem_post(&db->numURLConnections);
 }
 
 /**
@@ -373,6 +400,41 @@ static void ProcessStartTag(void *userData, const char *name, const char **atts)
 }
 
 /**
+ * ArticleThreadFn
+ * ---------------
+ *  Function to be passed to pthread_create that parses the provided article.
+ *  Necessary parsing data is stored in the struct pointed to by data.
+ */
+void *ArticleThreadFn(void *data)
+{
+  articleThreadEntry *articleData = (articleThreadEntry *) data;
+  ParseArticle(articleData->db, articleData->title, articleData->url);
+  DisposeArticleThreadEntry(articleData);
+  return NULL;
+}
+
+/**
+ * Initializes and disposes of the dynamically allocated struct that is needed 
+ * for each article parsing thread.
+ */
+articleThreadEntry *InitializeArticleThreadEntry(rssFeedState *state, 
+    rssFeedEntry *entry)
+{
+  articleThreadEntry *articleData = malloc(sizeof(articleThreadEntry));
+  articleData->db = state->db;
+  articleData->title = strdup((char *) entry->title);
+  articleData->url = strdup((char *) entry->url);
+  return articleData;
+}
+
+void DisposeArticleThreadEntry(articleThreadEntry *articleData)
+{
+  free(articleData->title);
+  free(articleData->url);
+  free(articleData);
+}
+
+/**
  * This is the handler that's invoked whenever a close (explicit or implicit)
  * tag is detected.  For our purposes, we want to turn off the activeField
  * by setting it to NULL, which will be detected by the CharacterData handler
@@ -396,8 +458,17 @@ static void ProcessEndTag(void *userData, const char *name)
   rssFeedState *state = userData;
   rssFeedEntry *entry = &state->entry;
   entry->activeField = NULL;
-  if (strcasecmp(name, "item") == 0) 
-    ParseArticle(state->db, entry->title, entry->url);
+  if (strcasecmp(name, "item") == 0) {
+    articleThreadEntry *articleData = InitializeArticleThreadEntry(state, entry);
+
+    sem_wait(&state->db->threadsLock);
+    pthread_t tempThread;
+    VectorAppend(&state->db->threads, &tempThread);
+    pthread_t *vectThread = (pthread_t *) VectorNth(&state->db->threads,
+        VectorLength(&state->db->threads)-1);
+    pthread_create(vectThread, NULL, ArticleThreadFn, articleData);
+    sem_post(&state->db->threadsLock);
+  }
 }
 
 /**
@@ -477,6 +548,7 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
     return; 
   }
   
+  sem_wait(&db->numURLConnections); 
   URLConnectionNew(&urlconn, &u);
   switch (urlconn.responseCode) {
       case 0: printf("Unable to connect to \"%s\".  Domain name or IP address is nonexistent.\n", articleURL);
@@ -492,7 +564,8 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
 		STDispose(&st);
 		break;
       case 301: 
-      case 302: // just pretend we have the redirected URL all along, though index using the new URL and not the old one...
+      case 302: // just pretend we have the redirected URL all along, though index using the new URL and not the old one..
+          sem_post(&db->numURLConnections);
 	        ParseArticle(db, articleTitle, urlconn.newUrl);
 		break;
       default: printf("Unable to pull \"%s\" from \"%s\". [Response code: %d] Punting...\n", articleTitle, u.serverName, urlconn.responseCode);
@@ -501,6 +574,7 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
   
   URLConnectionDispose(&urlconn);
   URLDispose(&u);
+  sem_post(&db->numURLConnections);
 }
 
 bool IsPreviouslySeenArticle(vector *previouslySeenArticles, rssNewsArticle *newsArticle,
