@@ -99,7 +99,7 @@ static int ArticleFrequencyCompare(const void *elem1, const void *elem2);
 
 static const char *const kWelcomeTextFile = "data/welcome.txt";
 static const char *const kDefaultStopWordsFile = "data/stop-words.txt";
-static const char *const kDefaultFeedsFile = "http://cs107.stanford.edu/rss-news/rss-feeds.txt";
+static const char *const kDefaultFeedsFile = "data/rss-feeds-tiny.txt";
 int main(int argc, char **argv)
 {
   const char *feedsFileName = (argc == 1) ? kDefaultFeedsFile : argv[1];
@@ -107,8 +107,8 @@ int main(int argc, char **argv)
   
   Welcome(kWelcomeTextFile);
   LoadStopWords(&db.stopWords, kDefaultStopWordsFile);
-  //BuildIndices(&db, feedsFileName);
-  //QueryIndices(&db);
+  BuildIndices(&db, feedsFileName);
+  QueryIndices(&db);
   return 0;
 }
 
@@ -203,40 +203,34 @@ static void LoadStopWords(hashset *stopWords, const char *kStopWordsFile)
  * document and index its content.
  *
  * @param db the rssDatabase holding on to the three large repositories of information.
- * @param feedsFileURL the full path leading to the flat text file storing up all of the
+ * @param feedsFileName the full path leading to the flat text file storing up all of the
  *                     URLs of XML RSS feeds.
  * 
  * No return value.
  */
 
 static const int kNumIndexEntryBuckets = 10007;
-static void BuildIndices(rssDatabase *db, const char *feedsFileURL)
+static void BuildIndices(rssDatabase *db, const char *feedsFileName)
 {
-  url u;
-  urlconnection urlconn;
+  FILE *infile;
+  streamtokenizer st;
+  char remoteFileName[2048];
   
-  URLNewAbsolute(&u, feedsFileURL);
-  URLConnectionNew(&urlconn, &u);
-  
-  if (urlconn.responseCode / 100 == 3) {
-    BuildIndices(db, urlconn.newUrl);
-  } else {
-    streamtokenizer st;
-    char remoteFileName[2048];
-    HashSetNew(&db->indices, sizeof(rssIndexEntry), kNumIndexEntryBuckets, IndexEntryHash, IndexEntryCompare, IndexEntryFree);
-    VectorNew(&db->previouslySeenArticles, sizeof(rssNewsArticle), NewsArticleFree, 0);
-    STNew(&st, urlconn.dataStream, kNewLineDelimiters, true);
-    while (STSkipUntil(&st, ":") != EOF) { // ignore everything up to the first selicolon of the line
-      STSkipOver(&st, ": ");		   // now ignore the semicolon and any whitespace directly after it
-      STNextToken(&st, remoteFileName, sizeof(remoteFileName));   
-      ProcessFeed(db, remoteFileName);
-    }
-    printf("\n");
-    STDispose(&st);
+  HashSetNew(&db->indices, sizeof(rssIndexEntry), kNumIndexEntryBuckets, IndexEntryHash, IndexEntryCompare, IndexEntryFree);
+  VectorNew(&db->previouslySeenArticles, sizeof(rssNewsArticle), NewsArticleFree, 0);
+ 
+  infile = fopen(feedsFileName, "r");
+  assert(infile != NULL);
+  STNew(&st, infile, kNewLineDelimiters, true);
+  while (STSkipUntil(&st, ":") != EOF) { // ignore everything up to the first selicolon of the line
+    STSkipOver(&st, ": ");		 // now ignore the semicolon and any whitespace directly after it
+    STNextToken(&st, remoteFileName, sizeof(remoteFileName));   
+    ProcessFeed(db, remoteFileName);
   }
   
-  URLConnectionDispose(&urlconn);
-  URLDispose(&u);
+  STDispose(&st);
+  fclose(infile);
+  printf("\n");
 }
 
 /**
