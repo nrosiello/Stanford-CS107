@@ -130,7 +130,7 @@ void DisposeArticleThreadEntry(articleThreadEntry *articleData);
 
 static const char *const kWelcomeTextFile = "data/welcome.txt";
 static const char *const kDefaultStopWordsFile = "data/stop-words.txt";
-static const char *const kDefaultFeedsFile = "data/rss-feeds-tiny.txt";
+static const char *const kDefaultFeedsFile = "data/rss-feeds-large.txt";
 int main(int argc, char **argv)
 {
   const char *feedsFileName = (argc == 1) ? kDefaultFeedsFile : argv[1];
@@ -776,6 +776,13 @@ static void QueryIndices(rssDatabase *db)
   VectorDispose(&db->previouslySeenArticles); 
   HashSetDispose(&db->stopWords);
   HashSetDispose(&db->serverLimits);
+  VectorDispose(&db->threads);
+  sem_destroy(&db->stopWordsLock);
+  sem_destroy(&db->indicesLock);
+  sem_destroy(&db->previouslySeenArticlesLock);
+  sem_destroy(&db->numURLConnections);
+  sem_destroy(&db->threadsLock);
+  sem_destroy(&db->serverLimitsLock);
 }
 
 /** 
