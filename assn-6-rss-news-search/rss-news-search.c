@@ -29,7 +29,14 @@ typedef struct {
   sem_t numURLConnections;
   vector threads;
   sem_t threadsLock;
+  hashset serverLimits;
+  sem_t serverLimitsLock;
 } rssDatabase;
+
+typedef struct {
+  char *server;
+  sem_t connections;
+} serverEntry;
 
 typedef struct {
   char title[MAX_TITLE_LENGTH];
@@ -212,6 +219,19 @@ static void LoadStopWords(hashset *stopWords, const char *kStopWordsFile)
 }
 
 /**
+ * ServerLimitsFree
+ * ----------------
+ *  Frees the dynamically allocated memory associated with the server name and
+ *  disposes of the embedded semaphore.
+ */
+void ServerLimitsFree(void *elemAddr)
+{
+  serverEntry *entry = elemAddr;
+  free(entry->server);
+  sem_destroy(&entry->connections);
+}
+
+/**
  * Function: BuildIndices
  * ----------------------
  * As far as the user is concerned, BuildIndices needs to read each and every
@@ -248,6 +268,9 @@ static void BuildIndices(rssDatabase *db, const char *feedsFileName)
   sem_init(&db->numURLConnections, 0, 24);
   VectorNew(&db->threads, sizeof(pthread_t), NULL, 0);
   sem_init(&db->threadsLock, 0, 1);
+  HashSetNew(&db->serverLimits, sizeof(serverEntry), 1009, StringHash, StringCompare,
+      ServerLimitsFree);
+  sem_init(&db->serverLimitsLock, 0, 1);
 
   infile = fopen(feedsFileName, "r");
   assert(infile != NULL);
@@ -267,6 +290,36 @@ static void BuildIndices(rssDatabase *db, const char *feedsFileName)
     pthread_join(* (pthread_t *) VectorNth(&db->threads, i), NULL);
   sem_post(&db->threadsLock);
   printf("\n");
+}
+
+/**
+ * Functions to manage the hashset of semaphores that control the connection limits
+ * for individual servers.
+ */
+void ServerWait(hashset *serverLimits, sem_t *serverLimitsLock, const char *serverName) 
+{
+  sem_wait(serverLimitsLock);
+  serverEntry *entry = HashSetLookup(serverLimits, &serverName);
+  // assure that the server exists in the hashset
+  if (entry == NULL) {
+    serverEntry newEntry;
+    newEntry.server = strdup(serverName);
+    HashSetEnter(serverLimits, &newEntry);
+    entry = HashSetLookup(serverLimits, &serverName);
+    assert(entry != NULL);
+    sem_init(&entry->connections, 0, 8);
+  }
+  sem_post(serverLimitsLock);
+  sem_wait(&entry->connections);
+}
+
+void ServerPost(hashset *serverLimits, sem_t *serverLimitsLock, const char *serverName) 
+{
+  sem_wait(serverLimitsLock);
+  serverEntry *entry = HashSetLookup(serverLimits, &serverName);
+  assert(entry != NULL);
+  sem_post(&entry->connections);
+  sem_post(serverLimitsLock);
 }
 
 /**
@@ -292,15 +345,18 @@ static void ProcessFeed(rssDatabase *db, const char *remoteDocumentName)
  
   URLNewAbsolute(&u, remoteDocumentName);
   sem_wait(&db->numURLConnections); 
+  ServerWait(&db->serverLimits, &db->serverLimitsLock, u.serverName);
   URLConnectionNew(&urlconn, &u);
-  
+   
   switch (urlconn.responseCode) {
       case 0: printf("Unable to connect to \"%s\".  Ignoring...", u.serverName);
 	      break;
       case 200: PullAllNewsItems(db, &urlconn);
                 break;
       case 301: 
-      case 302: ProcessFeed(db, urlconn.newUrl);
+      case 302: ServerPost(&db->serverLimits, &db->serverLimitsLock, u.serverName);
+                sem_post(&db->numURLConnections); 
+                ProcessFeed(db, urlconn.newUrl);
                 break;
       default: printf("Connection to \"%s\" was established, but unable to retrieve \"%s\". [response code: %d, response message:\"%s\"]\n",
 		      u.serverName, u.fileName, urlconn.responseCode, urlconn.responseMessage);
@@ -308,8 +364,9 @@ static void ProcessFeed(rssDatabase *db, const char *remoteDocumentName)
   };
   
   URLConnectionDispose(&urlconn);
-  URLDispose(&u);
+  ServerPost(&db->serverLimits, &db->serverLimitsLock, u.serverName);
   sem_post(&db->numURLConnections);
+  URLDispose(&u);
 }
 
 /**
@@ -549,6 +606,7 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
   }
   
   sem_wait(&db->numURLConnections); 
+  ServerWait(&db->serverLimits, &db->serverLimitsLock, u.serverName);
   URLConnectionNew(&urlconn, &u);
   switch (urlconn.responseCode) {
       case 0: printf("Unable to connect to \"%s\".  Domain name or IP address is nonexistent.\n", articleURL);
@@ -566,6 +624,7 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
       case 301: 
       case 302: // just pretend we have the redirected URL all along, though index using the new URL and not the old one..
           sem_post(&db->numURLConnections);
+          ServerPost(&db->serverLimits, &db->serverLimitsLock, u.serverName);
 	        ParseArticle(db, articleTitle, urlconn.newUrl);
 		break;
       default: printf("Unable to pull \"%s\" from \"%s\". [Response code: %d] Punting...\n", articleTitle, u.serverName, urlconn.responseCode);
@@ -573,8 +632,9 @@ static void ParseArticle(rssDatabase *db, const char *articleTitle, const char *
   }
   
   URLConnectionDispose(&urlconn);
-  URLDispose(&u);
   sem_post(&db->numURLConnections);
+  ServerPost(&db->serverLimits, &db->serverLimitsLock, u.serverName);
+  URLDispose(&u);
 }
 
 bool IsPreviouslySeenArticle(vector *previouslySeenArticles, rssNewsArticle *newsArticle,
@@ -715,6 +775,7 @@ static void QueryIndices(rssDatabase *db)
   HashSetDispose(&db->indices);
   VectorDispose(&db->previouslySeenArticles); 
   HashSetDispose(&db->stopWords);
+  HashSetDispose(&db->serverLimits);
 }
 
 /** 
