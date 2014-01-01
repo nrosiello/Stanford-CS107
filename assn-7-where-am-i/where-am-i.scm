@@ -287,3 +287,47 @@
 (newline)
 (display (sort-points (rate-points '((0 0) (2 0) (6 0)))))
 (newline)
+
+;; 
+;; Function: clumped-points
+;; ------------------------
+;; Given a list of points, rates and sorts them based on distance to other points,
+;; then returns the half of the points with the smallest ratings.
+;;
+
+(define (clumped-points points)
+  (let ((sorted-pts (map cadr (sort-points (rate-points points)))))
+    (prefix-of-list sorted-pts (floor (/ (length sorted-pts) 2))))) 
+  
+
+(newline)
+(display "Test clumped-points")
+(newline)
+(display (clumped-points '((0 0) (2 0) (6 0))))
+(newline)
+(display (clumped-points '((0 0) (2 0) (6 0) (1 0))))
+(newline)
+
+;; 
+;; Function: average-point
+;; -----------------------
+;; Given a list of points, computes a point that is the average of the x and y
+;; values.  Also includes the distance rating of how far the average point is
+;; from all the points.
+;;
+
+(define (average ls)
+  (/ (apply + ls) (length ls)))
+
+(define (average-point points)
+  (let ((avg-pt (list (average (map car points))
+                      (average (map cadr points)))))
+    (list (distance-product avg-pt points) avg-pt)))
+
+(newline)
+(display "Test average-point")
+(newline)
+(display (average-point '((0 0) (2 0) (6 0))))
+(newline)
+(display (average-point '((0 0) (2 0) (6 0) (1 0) (5 4) (4 5))))
+(newline)
