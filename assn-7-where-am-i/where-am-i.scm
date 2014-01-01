@@ -137,10 +137,10 @@
 ;; cons'ed to the front of it.  
 ;; 
 
-(define (partition pivot num-list)
+(define (partition pivot num-list cmp)
   (if (null? num-list) '(() ())
-      (let ((split-of-rest (partition pivot (cdr num-list))))
-	(if (< (car num-list) pivot)
+      (let ((split-of-rest (partition pivot (cdr num-list) cmp)))
+	(if (cmp (car num-list) pivot)
 	    (list (cons (car num-list) (car split-of-rest)) (cadr split-of-rest))
 	    (list (car split-of-rest) (cons (car num-list) (car (cdr split-of-rest))))))))
 
@@ -156,12 +156,18 @@
 ;; together in the proper order.
 ;;
 
-(define (quicksort num-list)
+(define (quicksort num-list cmp)
   (if (<= (length num-list) 1) num-list
-      (let ((split (partition (car num-list) (cdr num-list))))
-	(append (quicksort (car split)) 
+      (let ((split (partition (car num-list) (cdr num-list) cmp)))
+	(append (quicksort (car split) cmp) 
 		(list (car num-list)) 
-		(quicksort (cadr split))))))
+		(quicksort (cadr split) cmp)))))
+
+(newline)
+(display "Test quicksort")
+(newline)
+(display (quicksort '(3 4 1 6 5 2) >=))
+(newline)
 
 ;;
 ;; Function: remove
@@ -245,4 +251,39 @@
 (display (distance-product '(2 0) '((0 0) (2 0) (6 0))))
 (newline)
 (display (distance-product '(3 3) '((2 5) (7 8) (10 1) (3 2))))
+(newline)
+
+;; 
+;; Function: rate-points
+;; ---------------------
+;; Given a list of points, annotates each point in the list with the
+;; distance-product from the other points.
+;;
+
+(define (rate-points points)
+  (map (lambda (pt) (list (distance-product pt points) pt)) points))
+
+(newline)
+(display "Test rate-points")
+(newline)
+(display (rate-points '((0 0) (2 0) (6 0))))
+(newline)
+(display (rate-points '((2 5) (7 8) (10 1) (3 2))))
+(newline)
+
+;; 
+;; Function: sort-points
+;; ---------------------
+;; Given a list of rated points, sorts them in ascending order of rating.
+;;
+
+(define (sort-points points)
+  (quicksort points (lambda (pt1 pt2) (< (car pt1) (car pt2)))))
+
+(newline)
+(display "Test sort-points")
+(newline)
+(display (sort-points (rate-points '((2 5) (7 8) (10 1) (3 2)))))
+(newline)
+(display (sort-points (rate-points '((0 0) (2 0) (6 0)))))
 (newline)
