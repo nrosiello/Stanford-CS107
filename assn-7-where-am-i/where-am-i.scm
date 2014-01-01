@@ -331,3 +331,41 @@
 (newline)
 (display (average-point '((0 0) (2 0) (6 0) (1 0) (5 4) (4 5))))
 (newline)
+
+;; 
+;; Function: best-estimate
+;; -----------------------
+;; Given a list of circles representing a guess, reduces those points down to the
+;; most clumped, then returns their average point.
+;;
+
+(define (best-estimate circles)
+  (average-point (clumped-points (intersection-points circles))))
+
+(newline)
+(display "Test best-estimate")
+(newline)
+(display (best-estimate '((1 (0 0)) (1 (2 0)) (0.1 (1 0)))))
+(newline)
+
+;; 
+;; Function: where-am-i
+;; --------------------
+;; Given a list of distances and star locations, computes all possible guesses for
+;; your location.  The estimates are sorted in increasing order of distance
+;; rating.
+;;
+
+(define (where-am-i distances stars)
+  (quicksort (map best-estimate (all-guesses distances stars)) 
+             (lambda (pt1 pt2) (< (car pt1) (car pt2)))))
+
+(newline)
+(display "Test where-am-i")
+(newline)
+(display (where-am-i '(2.5 11.65 7.75) '((0 0) (4 4) (10 0))))
+(newline)
+(display (where-am-i '(1 2) '((0 0) (3 0))))
+(newline)
+(display (where-am-i '(2.65 5.55 5.25) '((0 0) (4 6) (10 0) (7 4) (12 5))))
+(newline)
