@@ -226,3 +226,23 @@
 (newline)
 (display (intersection-points '((1 (0 0)) (1 (1 0)) (1 (1 1)))))
 (newline)
+
+;;
+;; Function: distance-product
+;; --------------------------
+;; Given a point and a list of points, returns the product of the distances 
+;; between that point and all points in the list.  If the point is in the list,
+;; it should be removed so that it does not force the product to be zero.
+;;
+
+(define (distance-product pt1 ls)
+  (let ((ls-without-pt1 (remove pt1 ls)))
+    (apply * (map (lambda (pt2) (dist pt1 pt2)) ls-without-pt1))))
+
+(newline)
+(display "Test distance-product")
+(newline)
+(display (distance-product '(2 0) '((0 0) (2 0) (6 0))))
+(newline)
+(display (distance-product '(3 3) '((2 5) (7 8) (10 1) (3 2))))
+(newline)
