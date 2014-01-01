@@ -202,10 +202,27 @@
 (define *stars-2* '((0 0) (4 4) (10 0)))
 
 ;; 
-;; Include your code below.. make sure
-;; write and test each function independently.  This
-;; will require that you repeatedly type in
-;; (load "where-am-i.scm") at the command prompt, allowing
-;; it to override exisiting definitions and including
-;; the most recently implemented into the lot.
+;; Function: intersection-points
+;; -----------------------------
+;; Given a list of circles, returns a list of all points where the circles
+;; intersect.  Each circle in the list may intersect with all any other
+;; circle in the list.
 ;;
+
+(define (intersection-points points)
+  (define (intersections-with-first-point)
+    (apply append (map (lambda (pt) 
+                         (intersect (car points) pt)) 
+                       (cdr points))))
+  (if (< (length points) 2)
+    '()
+    (append (intersections-with-first-point) 
+            (intersection-points (cdr points)))))
+
+(newline)
+(display "Test intersection-points")
+(newline)
+(display (intersection-points '((1 (0 0)) (1 (1 0)))))
+(newline)
+(display (intersection-points '((1 (0 0)) (1 (1 0)) (1 (1 1)))))
+(newline)
