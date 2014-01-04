@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import random  # for seed, random
 import sys    # for stdout
 
@@ -9,30 +10,43 @@ def findOptimalAlignment(strand1, strand2):
     # if one of the two strands is empty, then there is only
     # one possible alignment, and of course it's optimal
     if len(strand1) == 0:
-        return len(strand2) * -2
+        return {'strand1': ' ' * len(strand2),
+                'strand2': strand2,
+                'score': len(strand2) * -2}
     if len(strand2) == 0:
-        return len(strand1) * -2
+        return {'strand1': strand1,
+                'strand2': ' ' * len(strand1),
+                'score': len(strand1) * -2}
 
     # There's the scenario where the two leading bases of
     # each strand are forced to align, regardless of whether or not
     # they actually match.
     bestWith = findOptimalAlignment(strand1[1:], strand2[1:])
     if strand1[0] == strand2[0]:
-        return bestWith + 1  # no benefit from making other recursive calls
+        # no benefit from making other recursive calls
+        return {'strand1': strand1[0] + bestWith['strand1'],
+                'strand2': strand2[0] + bestWith['strand2'],
+                'score': bestWith['score'] + 1}
 
-    best = bestWith - 1
+    best = {'strand1': strand1.ljust(len(strand2)),
+            'strand2': strand2.ljust(len(strand1)),
+            'score': bestWith['score'] - 1}
 
     # It's possible that the leading base of strand1 best
     # matches not the leading base of strand2, but the one after it.
     bestWithout = findOptimalAlignment(strand1, strand2[1:])
-    bestWithout -= 2  # penalize for insertion of space
-    if bestWithout > best:
+    bestWithout['score'] -= 2  # penalize for insertion of space
+    if bestWithout['score'] > best['score']:
+        bestWithout['strand1'] = ' ' + bestWithout['strand1']
+        bestWithout['strand2'] = strand2[0] + bestWithout['strand2']
         best = bestWithout
 
     # opposite scenario
     bestWithout = findOptimalAlignment(strand1[1:], strand2)
-    bestWithout -= 2  # penalize for insertion of space
-    if bestWithout > best:
+    bestWithout['score'] -= 2  # penalize for insertion of space
+    if bestWithout['score'] > best['score']:
+        bestWithout['strand2'] = ' ' + bestWithout['strand2']
+        bestWithout['strand1'] = strand1[0] + bestWithout['strand1']
         best = bestWithout
 
     return best
